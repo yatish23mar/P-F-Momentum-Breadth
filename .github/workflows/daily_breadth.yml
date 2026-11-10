@@ -4,7 +4,10 @@ on:
   schedule:
     # 8:55 PM IST is 15:25 UTC (Monday to Friday)
     - cron: '25 15 * * 1-5'
-  workflow_dispatch: # Allows manual trigger from GitHub UI anytime
+  workflow_dispatch: # Allows manual run anytime from the Actions tab
+
+permissions:
+  contents: write
 
 jobs:
   run-breadth-engine:
@@ -18,7 +21,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
 
       - name: Install System Dependencies
         run: |
@@ -27,7 +29,7 @@ jobs:
 
       - name: Install Python Dependencies
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install pandas numpy openpyxl requests git+https://github.com/rongardF/tvdatafeed.git
 
       - name: Run Multi-Sector & Broad Breadth Pipeline
@@ -42,6 +44,7 @@ jobs:
 
       - name: Upload Generated Reports as Artifacts
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: market-breadth-daily-reports
           path: |
