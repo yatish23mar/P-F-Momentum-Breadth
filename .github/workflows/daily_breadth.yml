@@ -1,0 +1,58 @@
+name: Daily Market Breadth Automation
+
+on:
+  schedule:
+    # 8:55 PM IST is 15:25 UTC (Monday to Friday)
+    - cron: '25 15 * * 1-5'
+  workflow_dispatch: # Allows manual trigger from GitHub UI anytime
+
+jobs:
+  run-breadth-engine:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git
+
+      - name: Install Python Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pandas numpy openpyxl requests git+https://github.com/rongardF/tvdatafeed.git
+
+      - name: Run Multi-Sector & Broad Breadth Pipeline
+        env:
+          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+          SENDER_APP_PASSWORD: ${{ secrets.SENDER_APP_PASSWORD }}
+          RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+          TV_USERNAME: ${{ secrets.TV_USERNAME }}
+          TV_PASSWORD: ${{ secrets.TV_PASSWORD }}
+        run: |
+          python master_market_breadth_system.py
+
+      - name: Upload Generated Reports as Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-breadth-daily-reports
+          path: |
+            Nifty_Multi_Sector_Momentum_Report.xlsx
+            Analysis.xlsx
+          retention-days: 30
+
+      - name: Commit & Push Updated Reports to Repo
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action Automation"
+          git add -f Nifty_Multi_Sector_Momentum_Report.xlsx Analysis.xlsx
+          git diff-index --quiet HEAD || git commit -m "Automated Post-Market Breadth Run [$(date -u +'%Y-%m-%d %H:%M') UTC]"
+          git push
