@@ -178,23 +178,43 @@ def run_sector_backtest(df, oversold=OVERSOLD_ENTRY, overbought=OVERBOUGHT_EXIT)
     return pd.DataFrame(trades)
 
 # =====================================================================
-# 5. CSV LOADER HELPER
+# 5. CSV LOADER HELPER (FUZZY MATCHES LINUX FILE NAMES & CLEANS SYMBOLS)
 # =====================================================================
 def load_symbols_from_csv(csv_filename):
-    if not os.path.exists(csv_filename):
+    target_path = None
+    if os.path.exists(csv_filename):
+        target_path = csv_filename
+    else:
+        # Search the current directory ignoring spaces, parentheses, underscores, and casing
+        norm_target = csv_filename.replace(" ", "").replace("(1)", "").replace("_", "").lower()
+        for f in os.listdir('.'):
+            if f.endswith('.csv'):
+                norm_f = f.replace(" ", "").replace("(1)", "").replace("_", "").lower()
+                if norm_f == norm_target:
+                    target_path = f
+                    break
+
+    if not target_path:
+        print(f"  ❌ CSV file NOT found in repo: {csv_filename}")
         return []
-    df = pd.read_csv(csv_filename)
-    col = [c for c in df.columns if 'symbol' in c.lower()][0]
-    raw_tickers = df[col].dropna().unique().tolist()
-    clean = []
-    for t in raw_tickers:
-        s = str(t).strip().replace('-', '_')
-        if s == 'GVT&D':
-            s = 'GVT_D'
-        elif s == 'GMRP&UI':
-            s = 'GMRPOWER'
-        clean.append(s)
-    return clean
+
+    try:
+        df = pd.read_csv(target_path)
+        col = [c for c in df.columns if 'symbol' in c.lower()][0]
+        raw_tickers = df[col].dropna().unique().tolist()
+        clean = []
+        for t in raw_tickers:
+            s = str(t).strip().replace('-', '_')
+            if s == 'GVT&D':
+                s = 'GVT_D'
+            elif s == 'GMRP&UI':
+                s = 'GMRPOWER'
+            clean.append(s)
+        print(f"  📂 Loaded {len(clean)} symbols from '{target_path}'")
+        return clean
+    except Exception as e:
+        print(f"  ❌ Error reading '{target_path}': {e}")
+        return []
 
 # =====================================================================
 # 6. MASTER UNIVERSE (6 BROAD INDICES + 13 SECTORAL INDICES)
@@ -349,7 +369,7 @@ ws_dash = wb.active
 ws_dash.title = "Sector Dashboard"
 
 dashboard_records = []
-analysis_matrix_records = {}  # Sector Name -> Series of daily smoothed BPI
+analysis_matrix_records = {}
 regime_dict = {}
 
 GLOBAL_PRICE_CACHE = {}
@@ -463,7 +483,6 @@ for sector_name, meta in SECTOR_CONFIG.items():
     if final_df.empty:
         continue
 
-    # Store for Analysis.xlsx matrix
     analysis_matrix_records[sector_name] = final_df['Smoothed_BPI_Pct']
 
     trades_df = run_sector_backtest(final_df, oversold=OVERSOLD_ENTRY, overbought=OVERBOUGHT_EXIT)
@@ -568,10 +587,9 @@ print(f"\n✅ Master report saved: {master_output_filename}")
 print("Generating Analysis.xlsx day-on-day breadth matrix...")
 matrix_df = pd.DataFrame(analysis_matrix_records)
 matrix_df.index = matrix_df.index.strftime('%Y-%m-%d')
-matrix_df = matrix_df.sort_index(ascending=False)  # Recent dates first (left to right)
+matrix_df = matrix_df.sort_index(ascending=False)
 matrix_transposed = matrix_df.T
 
-# Separate Broad indices vs Sector indices
 broad_order = ["Nifty 50", "Nifty 100", "Nifty Midcap 150", "Nifty Smallcap 250", "Nifty 500", "Nifty Total Market"]
 sector_order = [s for s in SECTOR_CONFIG.keys() if s not in broad_order]
 
@@ -666,7 +684,7 @@ Key Highlights:
 - Sectoral Universe: 13 NSE Sectoral Baskets.
 - Stabilization Model: 2.0% Box / 3-Box Reversal with 3-Day EMA Breadth Smoothing.
 
-The full 40-tab master workbook (Nifty_Multi_Sector_Momentum_Report.xlsx) with individual trade logs and daily transitions has been saved to your repository/artifacts.
+The full 58-tab master workbook (Nifty_Multi_Sector_Momentum_Report.xlsx) with individual trade logs and daily transitions has been saved to your repository/artifacts.
 
 Regards,
 Automated Market Breadth Engine
